@@ -8,10 +8,17 @@ import urllib.request
 from collections import OrderedDict
 
 def load_yolo_model(model_config, model_weights):
-    net = cv2.dnn.readNet(model_weights, model_config)
-    layer_names = net.getLayerNames()
-    output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
+    net = cv2.dnn.readNet(model_config, model_weights)
+
+    # Check if GPU acceleration is supported and enable it
+    if cv2.cuda.getCudaEnabledDeviceCount() > 0:
+        print("Enabling GPU acceleration")
+        net.setPreferableBackend(cv2.dnn.DNN_BACKEND_CUDA)
+        net.setPreferableTarget(cv2.dnn.DNN_TARGET_CUDA)
+
+    output_layers = net.getUnconnectedOutLayersNames()
     return net, output_layers
+
 
 def load_classes(model_classes):
     with open(model_classes, 'r') as f:
@@ -110,19 +117,28 @@ def get_yolo():
 def process_video(video_source, net, output_layers, classes, confidence_threshold):
     cap = cv2.VideoCapture(video_source)
 
+    if not cap.isOpened():
+        print("Error: Unable to open video source.")
+        return
+
     while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
+        try:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        indexes, boxes, class_ids, confidences = detect_objects(frame, net, output_layers, confidence_threshold)
-        annotated_frame = draw_bounding_boxes(frame, indexes, boxes, class_ids, confidences, classes)
-        json_output = generate_json(indexes, boxes, class_ids, confidences, classes)
+            indexes, boxes, class_ids, confidences = detect_objects(frame, net, output_layers, confidence_threshold)
+            annotated_frame = draw_bounding_boxes(frame, indexes, boxes, class_ids, confidences, classes)
+            json_output = generate_json(indexes, boxes, class_ids, confidences, classes)
 
-        cv2.imshow('Video', annotated_frame)
-        print(json_output)
+            cv2.imshow('Video', annotated_frame)
+            print(json_output)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        except KeyboardInterrupt:
+            print("Interrupted by user")
             break
 
     cap.release()
@@ -136,6 +152,7 @@ def run_yolo_on_video(video_source, confidence_threshold):
     classes = load_classes(model_classes)
 
     process_video(video_source, net, output_layers, classes, confidence_threshold)
+    del net
 
 
 if __name__ == '__main__':
