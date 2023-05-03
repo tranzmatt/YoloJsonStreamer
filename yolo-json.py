@@ -18,7 +18,8 @@ def load_classes(model_classes):
         classes = [line.strip() for line in f.readlines()]
     return classes
 
-def detect_objects(frame, net, output_layers):
+
+def detect_objects(frame, net, output_layers, confidence_threshold):
     height, width, _ = frame.shape
     blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), (0, 0, 0), True, crop=False)
 
@@ -34,7 +35,7 @@ def detect_objects(frame, net, output_layers):
             scores = detection[5:]
             class_id = np.argmax(scores)
             confidence = scores[class_id]
-            if confidence > 0.5:
+            if confidence > confidence_threshold:
                 center_x = int(detection[0] * width)
                 center_y = int(detection[1] * height)
                 w = int(detection[2] * width)
@@ -47,7 +48,7 @@ def detect_objects(frame, net, output_layers):
                 confidences.append(float(confidence))
                 class_ids.append(class_id)
 
-    indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
+    indexes = cv2.dnn.NMSBoxes(boxes, confidences, confidence_threshold, 0.4)
     return indexes, boxes, class_ids, confidences
 
 def draw_bounding_boxes(frame, indexes, boxes, class_ids, confidences, classes):
@@ -82,8 +83,6 @@ def generate_json(indexes, boxes, class_ids, confidences, classes):
     return json.dumps(detected_objects)
 
 
-# ... (insert the previously defined functions here) ...
-
 def download_file(url, local_path):
     with urllib.request.urlopen(url) as response, open(local_path, 'wb') as out_file:
         out_file.write(response.read())
@@ -107,18 +106,44 @@ def get_yolo():
 
     return model_config, model_weights, model_classes
 
-def run_yolo_on_video(video_source):
+
+def process_video(video_source, net, output_layers, classes, confidence_threshold):
+    cap = cv2.VideoCapture(video_source)
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        indexes, boxes, class_ids, confidences = detect_objects(frame, net, output_layers, confidence_threshold)
+        annotated_frame = draw_bounding_boxes(frame, indexes, boxes, class_ids, confidences, classes)
+        json_output = generate_json(indexes, boxes, class_ids, confidences, classes)
+
+        cv2.imshow('Video', annotated_frame)
+        print(json_output)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
+def run_yolo_on_video(video_source, confidence_threshold):
     model_config, model_weights, model_classes = get_yolo()
 
     net, output_layers = load_yolo_model(model_config, model_weights)
     classes = load_classes(model_classes)
 
-    process_video(video_source, net, output_layers, classes)
+    process_video(video_source, net, output_layers, classes, confidence_threshold)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input', type=str, help='Input video stream (RTSP/UDP link or file path)', required=True)
+    parser.add_argument('-i', '--input', type=str, help='Input video stream (RTSP/UDP link, file path, or device path)', required=True)
+    parser.add_argument('-c', '--confidence', type=float, default=0.5, help='Confidence threshold for object detection (default: 0.5)')
     args = parser.parse_args()
 
-    run_yolo_on_video(args.input)
+    run_yolo_on_video(args.input, args.confidence)def run_yolo_on_video(video_source, confidence_threshold):
+
 
