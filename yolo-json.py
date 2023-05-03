@@ -1,0 +1,124 @@
+import cv2
+import json
+import time
+import numpy as np
+import argparse
+import os
+import urllib.request
+from collections import OrderedDict
+
+def load_yolo_model(model_config, model_weights):
+    net = cv2.dnn.readNet(model_weights, model_config)
+    layer_names = net.getLayerNames()
+    output_layers = [layer_names[i[0] - 1] for i in net.getUnconnectedOutLayers()]
+    return net, output_layers
+
+def load_classes(model_classes):
+    with open(model_classes, 'r') as f:
+        classes = [line.strip() for line in f.readlines()]
+    return classes
+
+def detect_objects(frame, net, output_layers):
+    height, width, _ = frame.shape
+    blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), (0, 0, 0), True, crop=False)
+
+    net.setInput(blob)
+    layer_outputs = net.forward(output_layers)
+
+    class_ids = []
+    confidences = []
+    boxes = []
+
+    for output in layer_outputs:
+        for detection in output:
+            scores = detection[5:]
+            class_id = np.argmax(scores)
+            confidence = scores[class_id]
+            if confidence > 0.5:
+                center_x = int(detection[0] * width)
+                center_y = int(detection[1] * height)
+                w = int(detection[2] * width)
+                h = int(detection[3] * height)
+
+                x = int(center_x - w / 2)
+                y = int(center_y - h / 2)
+
+                boxes.append([x, y, w, h])
+                confidences.append(float(confidence))
+                class_ids.append(class_id)
+
+    indexes = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
+    return indexes, boxes, class_ids, confidences
+
+def draw_bounding_boxes(frame, indexes, boxes, class_ids, confidences, classes):
+    for i in range(len(boxes)):
+        if i in indexes:
+            x, y, w, h = boxes[i]
+            label = str(classes[class_ids[i]])
+            confidence = confidences[i]
+
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            cv2.putText(frame, f"{label} {round(confidence * 100)}%", (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    return frame
+
+def generate_json(indexes, boxes, class_ids, confidences, classes):
+    detected_objects = []
+
+    for i in range(len(boxes)):
+        if i in indexes:
+            x, y, w, h = boxes[i]
+            label = str(classes[class_ids[i]])
+            confidence = confidences[i]
+            timestamp = time.time()
+
+            detected_object = OrderedDict([
+                ('label', label),
+                ('bbox', {'x': x, 'y': y, 'w': w, 'h': h}),
+                ('confidence', confidence),
+                ('timestamp', timestamp)
+            ])
+            detected_objects.append(detected_object)
+
+    return json.dumps(detected_objects)
+
+
+# ... (insert the previously defined functions here) ...
+
+def download_file(url, local_path):
+    with urllib.request.urlopen(url) as response, open(local_path, 'wb') as out_file:
+        out_file.write(response.read())
+
+def get_yolo():
+    model_config = 'yolov4.cfg'
+    model_weights = 'yolov4.weights'
+    model_classes = 'coco.names'
+
+    if not os.path.exists(model_config):
+        print(f"Downloading {model_config} ...")
+        download_file('https://github.com/AlexeyAB/darknet/raw/master/cfg/yolov4.cfg', model_config)
+
+    if not os.path.exists(model_weights):
+        print(f"Downloading {model_weights} ...")
+        download_file('https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v3_optimal/yolov4.weights', model_weights)
+
+    if not os.path.exists(model_classes):
+        print(f"Downloading {model_classes} ...")
+        download_file('https://github.com/AlexeyAB/darknet/raw/master/data/coco.names', model_classes)
+
+    return model_config, model_weights, model_classes
+
+def run_yolo_on_video(video_source):
+    model_config, model_weights, model_classes = get_yolo()
+
+    net, output_layers = load_yolo_model(model_config, model_weights)
+    classes = load_classes(model_classes)
+
+    process_video(video_source, net, output_layers, classes)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--input', type=str, help='Input video stream (RTSP/UDP link or file path)', required=True)
+    args = parser.parse_args()
+
+    run_yolo_on_video(args.input)
+
