@@ -114,7 +114,7 @@ def get_yolo():
     return model_config, model_weights, model_classes
 
 
-def process_video(video_source, net, output_layers, classes, confidence_threshold):
+def process_video(video_source, net, output_layers, classes, confidence_threshold, print_json=False, display_video=False):
     cap = cv2.VideoCapture(video_source)
 
     if not cap.isOpened():
@@ -131,8 +131,11 @@ def process_video(video_source, net, output_layers, classes, confidence_threshol
             annotated_frame = draw_bounding_boxes(frame, indexes, boxes, class_ids, confidences, classes)
             json_output = generate_json(indexes, boxes, class_ids, confidences, classes)
 
-            cv2.imshow('Video', annotated_frame)
-            print(json_output)
+            if display_video:
+                cv2.imshow('Video', annotated_frame)
+
+            if print_json:
+                print(json_output)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -145,13 +148,13 @@ def process_video(video_source, net, output_layers, classes, confidence_threshol
     cv2.destroyAllWindows()
 
 
-def run_yolo_on_video(video_source, confidence_threshold):
+def run_yolo_on_video(video_source, confidence_threshold, print_json=False, display_video=False):
     model_config, model_weights, model_classes = get_yolo()
 
     net, output_layers = load_yolo_model(model_config, model_weights)
     classes = load_classes(model_classes)
 
-    process_video(video_source, net, output_layers, classes, confidence_threshold)
+    process_video(video_source, net, output_layers, classes, confidence_threshold, print_json, display_video)
     del net
 
 
@@ -159,8 +162,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str, help='Input video stream (RTSP/UDP link, file path, or device path)', required=True)
     parser.add_argument('-c', '--confidence', type=float, default=0.5, help='Confidence threshold for object detection (default: 0.5)')
+    parser.add_argument('-p', '--print', action='store_true', help='Print JSON messages for detected objects')
+    parser.add_argument('-d', '--display', action='store_true', help='Display the video with bounding boxes')
     args = parser.parse_args()
 
-    run_yolo_on_video(args.input, args.confidence)def run_yolo_on_video(video_source, confidence_threshold):
-
+    run_yolo_on_video(args.input, args.confidence, args.print, args.display)
 
