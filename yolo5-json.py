@@ -59,14 +59,14 @@ def download_file(url, local_path):
     with urllib.request.urlopen(url) as response, open(local_path, 'wb') as out_file:
         out_file.write(response.read())
 
-def get_yolo():
-    model_weights = 'models/yolov5s.pt'
+def get_yolo(yolo_model):
+    model_weights = f'models/{yolo_model}.pt'
     model_classes = 'models/coco.names'
 
     if not os.path.exists(model_weights):
         print(f"Downloading {model_weights} ...")
         os.makedirs('models', exist_ok=True)
-        download_file('https://github.com/ultralytics/yolov5/releases/download/v5.0/yolov5s.pt', model_weights)
+        download_file(f'https://github.com/ultralytics/yolov5/releases/download/v5.0/{yolo_model}.pt', model_weights)
 
     if not os.path.exists(model_classes):
         print(f"Downloading {model_classes} ...")
