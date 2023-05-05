@@ -12,7 +12,7 @@ import yaml
 
 from yolov5.models.yolo import Model
 
-os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'protocol_whitelist;file,rtp,udp,rtsp'
+os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'protocol_whitelist;file,rtp,udp,rtsp,tcp'
 
 def load_yolo_model(model_weights, confidence_threshold):
     model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
