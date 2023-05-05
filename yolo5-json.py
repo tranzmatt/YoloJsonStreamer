@@ -9,10 +9,18 @@ import urllib.request
 from collections import OrderedDict
 from PIL import Image
 
+import yaml
+from yolov5.models.yolo import Model
 
 def load_yolo_model(model_weights, confidence_threshold):
-    model = torch.hub.load('ultralytics/yolov5', 'custom', path_or_model=model_weights)
-    model.conf_thresh = confidence_threshold  # Update the confidence threshold in the model
+    with open('models/yolov5s.yaml') as f:
+        model_cfg = yaml.safe_load(f)
+
+    model = Model(model_cfg)
+    checkpoint = torch.load(model_weights, map_location='cpu')
+    model.load_state_dict(checkpoint['model'].state_dict())
+    model.conf = confidence_threshold  # Update the confidence threshold in the model
+    model.eval()  # Set the model to evaluation mode
     return model
 
 def load_classes(model_classes):
