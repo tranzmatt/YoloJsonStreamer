@@ -1,26 +1,22 @@
+import os
 import torch
 import cv2
 import json
 import time
 import numpy as np
 import argparse
-import os
 import urllib.request
 from collections import OrderedDict
 from PIL import Image
-
 import yaml
+
 from yolov5.models.yolo import Model
 
-def load_yolo_model(model_weights, confidence_threshold):
-    with open('models/yolov5s.yaml') as f:
-        model_cfg = yaml.safe_load(f)
+os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'protocol_whitelist;file,rtp,udp,rtsp'
 
-    model = Model(model_cfg)
-    checkpoint = torch.load(model_weights, map_location='cpu')
-    model.load_state_dict(checkpoint['model'].state_dict())
-    model.conf = confidence_threshold  # Update the confidence threshold in the model
-    model.eval()  # Set the model to evaluation mode
+def load_yolo_model(model_weights, confidence_threshold):
+    model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
+    model.conf = confidence_threshold
     return model
 
 def load_classes(model_classes):
@@ -63,18 +59,18 @@ def download_file(url, local_path):
     with urllib.request.urlopen(url) as response, open(local_path, 'wb') as out_file:
         out_file.write(response.read())
 
-
-
 def get_yolo():
-    model_weights = 'yolov5s.pt'
-    model_classes = 'coco.names'
+    model_weights = 'models/yolov5s.pt'
+    model_classes = 'models/coco.names'
 
     if not os.path.exists(model_weights):
         print(f"Downloading {model_weights} ...")
+        os.makedirs('models', exist_ok=True)
         download_file('https://github.com/ultralytics/yolov5/releases/download/v5.0/yolov5s.pt', model_weights)
 
     if not os.path.exists(model_classes):
         print(f"Downloading {model_classes} ...")
+        os.makedirs('models', exist_ok=True)
         download_file('https://github.com/AlexeyAB/darknet/raw/master/data/coco.names', model_classes)
 
     return model_weights, model_classes
@@ -110,7 +106,6 @@ def run_yolo_on_video(video_source, print_json=False, display_video=False, confi
     classes = load_classes(model_classes)
 
     process_video(video_source, model, classes, print_json, display_video)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
