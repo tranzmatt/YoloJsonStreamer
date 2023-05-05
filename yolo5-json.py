@@ -99,8 +99,8 @@ def process_video(video_source, model, classes, print_json=False, display_video=
     cap.release()
     cv2.destroyAllWindows()
 
-def run_yolo_on_video(video_source, print_json=False, display_video=False, confidence_threshold=0.25):
-    model_weights, model_classes = get_yolo()
+def run_yolo_on_video(video_source, print_json=False, display_video=False, confidence_threshold=0.5, yolo_model='yolov5s'):
+    model_weights, model_classes = get_yolo(yolo_model)
 
     model = load_yolo_model(model_weights, confidence_threshold)
     classes = load_classes(model_classes)
@@ -113,6 +113,7 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--print', help='Print JSON output', action='store_true')
     parser.add_argument('-c', '--confidence', type=float, default=0.25, help='Confidence threshold for object detection (default: 0.25)')
     parser.add_argument('-d', '--display', help='Display video with bounding boxes', action='store_true')
+    parser.add_argument('-y', '--yolo_model', type=str, choices=['yolov5s', 'yolov5m', 'yolov5l', 'yolov5x'], default='yolov5s', help='YOLOv5 model to use (default: yolov5s)')
     args = parser.parse_args()
 
-    run_yolo_on_video(args.input, args.print, args.display, args.confidence)
+    run_yolo_on_video(args.input, args.print, args.display, args.confidence, args.yolo_model)
