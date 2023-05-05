@@ -111,7 +111,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str, help='Input video stream (RTSP/UDP link, file path, or device path)', required=True)
     parser.add_argument('-p', '--print', help='Print JSON output', action='store_true')
-    parser.add_argument('-c', '--confidence', type=float, default=0.25, help='Confidence threshold for object detection (default: 0.25)')
+    parser.add_argument('-c', '--confidence', type=float, default=0.5, help='Confidence threshold for object detection (default: 0.5)')
     parser.add_argument('-d', '--display', help='Display video with bounding boxes', action='store_true')
     parser.add_argument('-y', '--yolo_model', type=str, choices=['yolov5s', 'yolov5m', 'yolov5l', 'yolov5x'], default='yolov5s', help='YOLOv5 model to use (default: yolov5s)')
     args = parser.parse_args()
