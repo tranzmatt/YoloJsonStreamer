@@ -1,0 +1,6 @@
+opencv-python
+numpy
+imutils
+paho-mqtt
+ffmpeg-python
+urllib3
