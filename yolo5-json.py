@@ -15,7 +15,7 @@ from yolov5.models.yolo import Model
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'protocol_whitelist;file,rtp,udp,rtsp,tcp'
 
 def load_yolo_model(model_weights, confidence_threshold):
-    model = torch.hub.load('ultralytics/yolov5', 'yolov5s')
+    model = torch.hub.load('ultralytics/yolov5', model_weights)
     model.conf = confidence_threshold
     return model
 
@@ -60,17 +60,15 @@ def download_file(url, local_path):
         out_file.write(response.read())
 
 def get_yolo(yolo_model):
-    model_weights = f'models/{yolo_model}.pt'
-    model_classes = 'models/coco.names'
+    model_weights = f'{yolo_model}'
+    model_classes = 'coco.names'
 
     if not os.path.exists(model_weights):
         print(f"Downloading {model_weights} ...")
-        os.makedirs('models', exist_ok=True)
-        download_file(f'https://github.com/ultralytics/yolov5/releases/download/v5.0/{yolo_model}.pt', model_weights)
+        download_file(f'https://github.com/ultralytics/yolov5/releases/download/v5.0/{yolo_model}.pt', f'{model_weights}.pt')
 
     if not os.path.exists(model_classes):
         print(f"Downloading {model_classes} ...")
-        os.makedirs('models', exist_ok=True)
         download_file('https://github.com/AlexeyAB/darknet/raw/master/data/coco.names', model_classes)
 
     return model_weights, model_classes
