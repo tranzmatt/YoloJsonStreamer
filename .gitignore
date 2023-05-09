@@ -161,3 +161,6 @@ cython_debug/
 #
 
 models/
+yolo*.pt
+yolo*.yaml
+coco.names
