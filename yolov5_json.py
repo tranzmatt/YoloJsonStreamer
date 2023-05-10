@@ -14,57 +14,60 @@ from yolov5.models.yolo import Model
 
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'protocol_whitelist;file,rtp,udp,rtsp,tcp'
 
-def download_file(url, local_path):
-    with urllib.request.urlopen(url) as response, open(local_path, 'wb') as out_file:
-        out_file.write(response.read())
+def load_yolo_model(model=None, model_weights=None, confidence_threshold=0.5, the_torch_hub='ultralytics/yolov5'):
 
-def get_yolo(yolo_model):
-    models_dir = 'models'
-    model_weights = f'{yolo_model}.pt'
-    model_classes = 'coco.names'
+    the_model = None
+    model_loaded = False
 
-    # Create the models directory if it doesn't exist
-    if not os.path.exists(models_dir):
-        os.makedirs(models_dir)
-
-    # Construct the paths to the model_weights and model_classes files
-    model_weights_path = os.path.join(models_dir, model_weights)
-    model_classes_path = os.path.join(models_dir, model_classes)
-
-    if not os.path.exists(model_weights_path):
-        print(f"Downloading {model_weights} ...")
-        download_file(f'https://github.com/ultralytics/yolov5/releases/download/v5.0/{yolo_model}.pt', model_weights_path)
-
-    if not os.path.exists(model_classes_path):
-        print(f"Downloading {model_classes} ...")
-        download_file('https://github.com/AlexeyAB/darknet/raw/master/data/coco.names', model_classes_path)
-
-    return model_weights_path, model_classes_path
-
-def load_yolo_model(model_weights, confidence_threshold):
-    # Extract the model type from the model weights file name
-    model_type = os.path.basename(model_weights).split('.')[0]
-
-    if os.path.isfile(model_weights):
+    # If we've provided a custom model weights file
+    if model_weights:
         try:
-            # Load model architecture
-            print(f"Attempting to locally load {model_weights}")
-            model = torch.hub.load('ultralytics/yolov5', 'custom', path=model_weights, source='local')  # local repo
-            # Set confidence threshold
-            model.conf = confidence_threshold
+            print(f"Checking for {model_weights}")
+            # Attempt to load the model from the local file
+            if os.path.isfile(model_weights):
+                print(f"Local {models_weights} found, attempting to load")
+                the_model = torch.load(model_weights)
+                the_model.conf = confidence_threshold
+                model_loaded = True
         except Exception as e:
-            print(f"Error loading {model_weights} locally: {e}")
-            print(f"Loading {model_weights} from torch hub with force_reload=True ...")
-            model = torch.hub.load('ultralytics/yolov5', model_type, force_reload=True)
-            model.conf = confidence_threshold
-            torch.save(model.state_dict(), model_weights)
-    else:
-        print(f"{model_weights} not found locally. Loading {model_type} from torch hub ...")
-        model = torch.hub.load('ultralytics/yolov5', model_type)
-        model.conf = confidence_threshold
-        torch.save(model.state_dict(), model_weights)
+            print(f"Error loading {model_weights} local model: {e}")
 
-    return model
+    if not model_loaded and model is not None:
+        
+
+        available_models = torch.hub.list(the_torch_hub)
+        print(available_models)
+        if model not in available_models:
+            print(f"The model {model} is not available from {the_torch_hub}")
+            return the_model
+
+        try:
+            print(f"Attempting to load {model} from cache")
+            the_model = torch.hub.load(the_torch_hub, model, force_reload=False)
+            the_model.conf = confidence_threshold
+            model_loaded = True
+        except Exception as e:
+            print(f"Loading from cache failed {e}.  Redownloading")
+            for attempt in range(3):
+                try:
+                    # Load the model from torch.hub and force redownload
+                    #torch.hub.set_dir(None)
+                    the_model = torch.hub.load(the_torch_hub, model, force_reload=True)
+                    the_model.conf = confidence_threshold
+                    model_loaded = True
+                    break
+                except Exception as e:
+                    print(f"Error downloading {model} from torch.hub: {e}")
+                    print("Model download was interrupted or incomplete. Please try again.")
+
+    if not model_loaded or the_model is None:
+        print("Unable to load any model!")
+    elif torch.cuda.is_available():
+        print(f"CUDA capable device found")
+        the_model.to('cuda:0')
+
+    return the_model
+
 
 def load_classes(model_classes):
     with open(model_classes, 'r') as f:
@@ -102,6 +105,10 @@ def generate_json(results, classes):
 
     return json.dumps(detected_objects)
 
+def download_file(url, local_path):
+    with urllib.request.urlopen(url) as response, open(local_path, 'wb') as out_file:
+        out_file.write(response.read())
+
 def process_video(video_source, model, classes, print_json=False, display_video=False):
     cap = cv2.VideoCapture(video_source)
 
@@ -126,15 +133,16 @@ def process_video(video_source, model, classes, print_json=False, display_video=
     cap.release()
     cv2.destroyAllWindows()
 
-def run_yolo_on_video(video_source, print_json=False, display_video=False, confidence_threshold=0.5, yolo_model='yolov5s'):
+def run_yolo_on_video(video_source, print_json=False, display_video=False, confidence_threshold=0.5, yolo_model='yolov5s', model_weights=None):
 
-    # DL model weights if not found
-    model_weights, model_classes = get_yolo(yolo_model)
+    model_classes = 'coco.names'
 
-    # load YOLO models
-    model = load_yolo_model(model_weights, confidence_threshold)
+    if not os.path.exists(model_classes):
+        print(f"Downloading {model_classes} ...")
+        download_file('https://github.com/AlexeyAB/darknet/raw/master/data/coco.names', model_classes)
 
-    # Load classes
+    model = load_yolo_model(yolo_model, model_weights, confidence_threshold)
+
     classes = load_classes(model_classes)
 
     process_video(video_source, model, classes, print_json, display_video)
@@ -145,7 +153,8 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--print', help='Print JSON output', action='store_true')
     parser.add_argument('-c', '--confidence', type=float, default=0.5, help='Confidence threshold for object detection (default: 0.5)')
     parser.add_argument('-d', '--display', help='Display video with bounding boxes', action='store_true')
-    parser.add_argument('-y', '--yolo_model', type=str, choices=['yolov5s', 'yolov5m', 'yolov5l', 'yolov5x'], default='yolov5s', help='YOLOv5 model to use (default: yolov5s)')
+    parser.add_argument('-w', '--model_weights', help='Provide custom weight name', action='store_true')
+    parser.add_argument('-y', '--yolo_model', type=str, default='yolov5s', help='YOLOv5 model to use (default: yolov5s)')
     args = parser.parse_args()
 
-    run_yolo_on_video(args.input, args.print, args.display, args.confidence, args.yolo_model)
+    run_yolo_on_video(args.input, args.print, args.display, args.confidence, args.yolo_model, args.model_weights)
