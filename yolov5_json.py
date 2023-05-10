@@ -127,7 +127,6 @@ def open_video_stream(input_source):
                     print(f"Connected to RTSP stream using {transport} transport method.")
                     return cap
     
-                cap.release()
             except Exception as e:
                     print(f"RTSP stream {transport} transport failed.")
 
