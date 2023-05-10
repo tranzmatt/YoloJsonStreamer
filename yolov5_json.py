@@ -1,4 +1,5 @@
 import os
+import re
 import torch
 import cv2
 import json
@@ -7,8 +8,6 @@ import argparse
 import urllib.request
 from collections import OrderedDict
 from PIL import Image
-
-os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'protocol_whitelist;file,rtp,udp,rtsp,tcp|rtsp_transport;tcp|loglevel;error'
 
 def load_yolo_model(model=None, model_weights=None, confidence_threshold=0.5, the_torch_hub='ultralytics/yolov5'):
 
@@ -109,10 +108,54 @@ def download_file(url, local_path):
         out_file.write(response.read())
 
 
-def process_video(video_source, model, classes, print_json=False, display_video=False):
-    cap = cv2.VideoCapture(video_source)
+def open_video_stream(input_source):
+    is_rtsp = re.match(r"rtsp://", input_source)
+    is_local_device = re.match(r"/dev/video\d+", input_source)
+    is_other_protocol = re.match(r"(udp|http|https)://", input_source)
 
-    while cap.isOpened():
+    if is_rtsp:
+        transport_methods = ['udp', 'tcp']
+
+        for transport in transport_methods:
+
+            try:
+                os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = f'protocol_whitelist;file,rtp,udp,rtsp,tcp|rtsp_transport;{transport}|loglevel;error'
+                cap = cv2.VideoCapture(input_source)
+ 
+                # Check if the stream is opened successfully
+                if cap.isOpened():
+                    print(f"Connected to RTSP stream using {transport} transport method.")
+                    return cap
+    
+                cap.release()
+            except Exception as e:
+                    print(f"RTSP stream {transport} transport failed.")
+
+
+        print("Failed to connect to RTSP stream using both UDP and TCP transport methods.")
+        return None
+
+    elif is_local_device or os.path.isfile(input_source) or is_other_protocol:
+        cap = cv2.VideoCapture(input_source)
+
+        if cap.isOpened():
+            print("Connected to the local device, file, or other protocol.")
+            return cap
+
+        print("Failed to connect to the local device, file, or other protocol.")
+        return None
+
+    else:
+        print(f"{input_source} is an invalid input source.")
+        return None
+
+
+
+def process_video(video_source, model, classes, print_json=False, display_video=False):
+
+    cap = open_video_stream(video_source)
+
+    while cap and cap.isOpened():
         ret, frame = cap.read()
         if not ret:
             break
