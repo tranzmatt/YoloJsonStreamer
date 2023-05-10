@@ -14,9 +14,56 @@ from yolov5.models.yolo import Model
 
 os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'protocol_whitelist;file,rtp,udp,rtsp,tcp'
 
+def download_file(url, local_path):
+    with urllib.request.urlopen(url) as response, open(local_path, 'wb') as out_file:
+        out_file.write(response.read())
+
+def get_yolo(yolo_model):
+    models_dir = 'models'
+    model_weights = f'{yolo_model}.pt'
+    model_classes = 'coco.names'
+
+    # Create the models directory if it doesn't exist
+    if not os.path.exists(models_dir):
+        os.makedirs(models_dir)
+
+    # Construct the paths to the model_weights and model_classes files
+    model_weights_path = os.path.join(models_dir, model_weights)
+    model_classes_path = os.path.join(models_dir, model_classes)
+
+    if not os.path.exists(model_weights_path):
+        print(f"Downloading {model_weights} ...")
+        download_file(f'https://github.com/ultralytics/yolov5/releases/download/v5.0/{yolo_model}.pt', model_weights_path)
+
+    if not os.path.exists(model_classes_path):
+        print(f"Downloading {model_classes} ...")
+        download_file('https://github.com/AlexeyAB/darknet/raw/master/data/coco.names', model_classes_path)
+
+    return model_weights_path, model_classes_path
+
 def load_yolo_model(model_weights, confidence_threshold):
-    model = torch.hub.load('ultralytics/yolov5', model_weights)
-    model.conf = confidence_threshold
+    # Extract the model type from the model weights file name
+    model_type = os.path.basename(model_weights).split('.')[0]
+
+    if os.path.isfile(model_weights):
+        try:
+            # Load model architecture
+            print(f"Attempting to locally load {model_weights}")
+            model = torch.hub.load('ultralytics/yolov5', 'custom', path=model_weights, source='local')  # local repo
+            # Set confidence threshold
+            model.conf = confidence_threshold
+        except Exception as e:
+            print(f"Error loading {model_weights} locally: {e}")
+            print(f"Loading {model_weights} from torch hub with force_reload=True ...")
+            model = torch.hub.load('ultralytics/yolov5', model_type, force_reload=True)
+            model.conf = confidence_threshold
+            torch.save(model.state_dict(), model_weights)
+    else:
+        print(f"{model_weights} not found locally. Loading {model_type} from torch hub ...")
+        model = torch.hub.load('ultralytics/yolov5', model_type)
+        model.conf = confidence_threshold
+        torch.save(model.state_dict(), model_weights)
+
     return model
 
 def load_classes(model_classes):
@@ -55,24 +102,6 @@ def generate_json(results, classes):
 
     return json.dumps(detected_objects)
 
-def download_file(url, local_path):
-    with urllib.request.urlopen(url) as response, open(local_path, 'wb') as out_file:
-        out_file.write(response.read())
-
-def get_yolo(yolo_model):
-    model_weights = f'{yolo_model}'
-    model_classes = 'coco.names'
-
-    if not os.path.exists(model_weights):
-        print(f"Downloading {model_weights} ...")
-        download_file(f'https://github.com/ultralytics/yolov5/releases/download/v5.0/{yolo_model}.pt', f'{model_weights}.pt')
-
-    if not os.path.exists(model_classes):
-        print(f"Downloading {model_classes} ...")
-        download_file('https://github.com/AlexeyAB/darknet/raw/master/data/coco.names', model_classes)
-
-    return model_weights, model_classes
-
 def process_video(video_source, model, classes, print_json=False, display_video=False):
     cap = cv2.VideoCapture(video_source)
 
@@ -98,9 +127,14 @@ def process_video(video_source, model, classes, print_json=False, display_video=
     cv2.destroyAllWindows()
 
 def run_yolo_on_video(video_source, print_json=False, display_video=False, confidence_threshold=0.5, yolo_model='yolov5s'):
+
+    # DL model weights if not found
     model_weights, model_classes = get_yolo(yolo_model)
 
+    # load YOLO models
     model = load_yolo_model(model_weights, confidence_threshold)
+
+    # Load classes
     classes = load_classes(model_classes)
 
     process_video(video_source, model, classes, print_json, display_video)
