@@ -3,16 +3,12 @@ import torch
 import cv2
 import json
 import time
-import numpy as np
 import argparse
 import urllib.request
 from collections import OrderedDict
 from PIL import Image
-import yaml
 
-from yolov5.models.yolo import Model
-
-os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'protocol_whitelist;file,rtp,udp,rtsp,tcp'
+os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'protocol_whitelist;file,rtp,udp,rtsp,tcp|rtsp_transport;tcp|loglevel;error'
 
 def load_yolo_model(model=None, model_weights=None, confidence_threshold=0.5, the_torch_hub='ultralytics/yolov5'):
 
@@ -33,10 +29,9 @@ def load_yolo_model(model=None, model_weights=None, confidence_threshold=0.5, th
             print(f"Error loading {model_weights} local model: {e}")
 
     if not model_loaded and model is not None:
-        
-
         available_models = torch.hub.list(the_torch_hub)
         print(available_models)
+
         if model not in available_models:
             print(f"The model {model} is not available from {the_torch_hub}")
             return the_model
@@ -51,7 +46,6 @@ def load_yolo_model(model=None, model_weights=None, confidence_threshold=0.5, th
             for attempt in range(3):
                 try:
                     # Load the model from torch.hub and force redownload
-                    #torch.hub.set_dir(None)
                     the_model = torch.hub.load(the_torch_hub, model, force_reload=True)
                     the_model.conf = confidence_threshold
                     model_loaded = True
@@ -74,18 +68,22 @@ def load_classes(model_classes):
         classes = [line.strip() for line in f.readlines()]
     return classes
 
+
 def detect_objects(frame, model):
     img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
     results = model(img)
     return results
+
 
 def draw_bounding_boxes(frame, results, classes):
     for *box, conf, cls in results.xyxy[0]:
         x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
         label = classes[int(cls)]
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(frame, f"{label} {round(conf.item() * 100)}%", (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.putText(frame, f"{label} {round(conf.item() * 100)}%", (x1, y1 - 5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
     return frame
+
 
 def generate_json(results, classes):
     detected_objects = []
@@ -105,9 +103,11 @@ def generate_json(results, classes):
 
     return json.dumps(detected_objects)
 
+
 def download_file(url, local_path):
     with urllib.request.urlopen(url) as response, open(local_path, 'wb') as out_file:
         out_file.write(response.read())
+
 
 def process_video(video_source, model, classes, print_json=False, display_video=False):
     cap = cv2.VideoCapture(video_source)
@@ -133,7 +133,9 @@ def process_video(video_source, model, classes, print_json=False, display_video=
     cap.release()
     cv2.destroyAllWindows()
 
-def run_yolo_on_video(video_source, print_json=False, display_video=False, confidence_threshold=0.5, yolo_model='yolov5s', model_weights=None):
+
+def run_yolo_on_video(video_source, print_json=False, display_video=False,
+                      confidence_threshold=0.5, yolo_model='yolov5s', model_weights=None):
 
     model_classes = 'coco.names'
 
@@ -147,14 +149,19 @@ def run_yolo_on_video(video_source, print_json=False, display_video=False, confi
 
     process_video(video_source, model, classes, print_json, display_video)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--input', type=str, help='Input video stream (RTSP/UDP link, file path, or device path)', required=True)
+    parser.add_argument('-i', '--input', type=str,
+                        help='Input video stream (RTSP/UDP link, file path, or device path)', required=True)
     parser.add_argument('-p', '--print', help='Print JSON output', action='store_true')
-    parser.add_argument('-c', '--confidence', type=float, default=0.5, help='Confidence threshold for object detection (default: 0.5)')
+    parser.add_argument('-c', '--confidence', type=float, default=0.5,
+                        help='Confidence threshold for object detection (default: 0.5)')
     parser.add_argument('-d', '--display', help='Display video with bounding boxes', action='store_true')
-    parser.add_argument('-w', '--model_weights', help='Provide custom weight name', action='store_true')
-    parser.add_argument('-y', '--yolo_model', type=str, default='yolov5s', help='YOLOv5 model to use (default: yolov5s)')
+    parser.add_argument('-w', '--model_weights',  type=str, help='Provide custom weight name')
+    parser.add_argument('-y', '--yolo_model', type=str, default='yolov5s',
+                        help='YOLOv5 model to use (default: yolov5s)')
     args = parser.parse_args()
 
-    run_yolo_on_video(args.input, args.print, args.display, args.confidence, args.yolo_model, args.model_weights)
+    run_yolo_on_video(args.input, args.print, args.display, args.confidence,
+                      args.yolo_model, args.model_weights)

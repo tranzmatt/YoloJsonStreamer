@@ -1,7 +1,6 @@
 --extra-index-url https://download.pytorch.org/whl/cu117
 numpy
 opencv-python
-opencv-python-headless
 torch==1.13.1+cu117
 torchvision==0.14.1+cu117
 torchaudio==0.13.1+cu117
