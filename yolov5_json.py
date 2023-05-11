@@ -150,7 +150,19 @@ def open_video_stream(input_source):
 
 
 
-def process_video(video_source, model, classes, print_json=False, display_video=False):
+def process_video(video_source, model, classes, print_json=False, display_video=False,
+                  confidence_threshold=0.5, yolo_model='yolov5s', model_weights=None,
+                  mqtt_host=None, mqtt_port=None, mqtt_topic=None, mqtt_user=None,
+                  mqtt_password=None):
+    # Existing code...
+
+    client = mqtt.Client(clean_session=False)
+
+    if mqtt_user and mqtt_password:
+        client.username_pw_set(mqtt_user, mqtt_password)
+
+    client.connect(mqtt_host, mqtt_port)
+    client.loop_start()
 
     cap = open_video_stream(video_source)
 
@@ -166,18 +178,25 @@ def process_video(video_source, model, classes, print_json=False, display_video=
         if display_video:
             cv2.imshow('Video', annotated_frame)
 
-        if print_json:
+        if publish_json:
             print(json_output)
+            # Publish JSON output to MQTT
+            client.publish(mqtt_topic, json_output)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cap.release()
     cv2.destroyAllWindows()
+    # Release resources and disconnect MQTT
+    client.loop_stop()
+    client.disconnect()
 
 
 def run_yolo_on_video(video_source, print_json=False, display_video=False,
-                      confidence_threshold=0.5, yolo_model='yolov5s', model_weights=None):
+                          confidence_threshold=0.5, yolo_model='yolov5s', model_weights=None,
+                          mqtt_host=None, mqtt_port=None, mqtt_topic=None, mqtt_user=None,
+                          mqtt_password=None):
 
     model_classes = 'coco.names'
 
@@ -189,21 +208,30 @@ def run_yolo_on_video(video_source, print_json=False, display_video=False,
 
     classes = load_classes(model_classes)
 
-    process_video(video_source, model, classes, print_json, display_video)
-
+    process_video(video_source, model, classes, print_json, display_video,
+                  confidence_threshold, yolo_model, model_weights,
+                  mqtt_host, mqtt_port, mqtt_topic, mqtt_user, mqtt_password)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str,
                         help='Input video stream (RTSP/UDP link, file path, or device path)', required=True)
-    parser.add_argument('-p', '--print', help='Print JSON output', action='store_true')
+    parser.add_argument('-p', '--publish', help='Publish JSON output', action='store_true')
     parser.add_argument('-c', '--confidence', type=float, default=0.5,
                         help='Confidence threshold for object detection (default: 0.5)')
     parser.add_argument('-d', '--display', help='Display video with bounding boxes', action='store_true')
     parser.add_argument('-w', '--model_weights',  type=str, help='Provide custom weight name')
     parser.add_argument('-y', '--yolo_model', type=str, default='yolov5s',
                         help='YOLOv5 model to use (default: yolov5s)')
+
+    parser.add_argument('-m', '--mqtt_host', type=str, help='MQTT broker host')
+    parser.add_argument('-r', '--mqtt_port', type=int, help='MQTT broker port')
+    parser.add_argument('-t', '--mqtt_topic', type=str, help='MQTT message topic')
+    parser.add_argument('-u', '--mqtt_user', type=str, help='MQTT broker username')
+    parser.add_argument('-w', '--mqtt_password', type=str, help='MQTT broker password')
     args = parser.parse_args()
 
     run_yolo_on_video(args.input, args.print, args.display, args.confidence,
-                      args.yolo_model, args.model_weights)
+                      args.yolo_model, args.model_weights, args.mqtt_host,
+                      args.mqtt_port, args.mqtt_topic, args.mqtt_user,
+                      args.mqtt_password)
