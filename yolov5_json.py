@@ -8,9 +8,10 @@ import argparse
 import urllib.request
 from collections import OrderedDict
 from PIL import Image
+import mqtt_push
+import socket
 
 def load_yolo_model(model=None, model_weights=None, confidence_threshold=0.5, the_torch_hub='ultralytics/yolov5'):
-
     the_model = None
     model_loaded = False
 
@@ -119,17 +120,17 @@ def open_video_stream(input_source):
         for transport in transport_methods:
 
             try:
-                os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = f'protocol_whitelist;file,rtp,udp,rtsp,tcp|rtsp_transport;{transport}|loglevel;error'
+                os.environ[
+                    'OPENCV_FFMPEG_CAPTURE_OPTIONS'] = f'protocol_whitelist;file,rtp,udp,rtsp,tcp|rtsp_transport;{transport}|loglevel;error'
                 cap = cv2.VideoCapture(input_source)
- 
+
                 # Check if the stream is opened successfully
                 if cap.isOpened():
                     print(f"Connected to RTSP stream using {transport} transport method.")
                     return cap
-    
-            except Exception as e:
-                    print(f"RTSP stream {transport} transport failed.")
 
+            except Exception as e:
+                print(f"RTSP stream {transport} transport failed.")
 
         print("Failed to connect to RTSP stream using both UDP and TCP transport methods.")
         return None
@@ -150,19 +151,20 @@ def open_video_stream(input_source):
 
 
 
-def process_video(video_source, model, classes, print_json=False, display_video=False,
-                  confidence_threshold=0.5, yolo_model='yolov5s', model_weights=None,
+# Define the on_publish callback function
+def on_publish(client, userdata, mid):
+    print(f"Message published successfully (Message ID: {mid})")
+
+
+def process_video(video_source, model, classes, publish_json=False, display_video=False,
                   mqtt_host=None, mqtt_port=None, mqtt_topic=None, mqtt_user=None,
                   mqtt_password=None):
     # Existing code...
 
-    client = mqtt.Client(clean_session=False)
-
-    if mqtt_user and mqtt_password:
-        client.username_pw_set(mqtt_user, mqtt_password)
-
-    client.connect(mqtt_host, mqtt_port)
-    client.loop_start()
+    client = None
+    if publish_json:
+        client_id = mqtt_push.create_client_id(video_source)
+        client = mqtt_push.create_mqtt_client(client_id, mqtt_host, mqtt_port, mqtt_user, mqtt_password)
 
     cap = open_video_stream(video_source)
 
@@ -179,24 +181,24 @@ def process_video(video_source, model, classes, print_json=False, display_video=
             cv2.imshow('Video', annotated_frame)
 
         if publish_json:
-            print(json_output)
-            # Publish JSON output to MQTT
-            client.publish(mqtt_topic, json_output)
+            mqtt_push.publish_message(client, mqtt_topic, json_output)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cap.release()
     cv2.destroyAllWindows()
+
     # Release resources and disconnect MQTT
-    client.loop_stop()
-    client.disconnect()
+    if publish_json:
+        client.loop_stop()
+        client.disconnect()
 
 
-def run_yolo_on_video(video_source, print_json=False, display_video=False,
-                          confidence_threshold=0.5, yolo_model='yolov5s', model_weights=None,
-                          mqtt_host=None, mqtt_port=None, mqtt_topic=None, mqtt_user=None,
-                          mqtt_password=None):
+def run_yolo_on_video(video_source, publish_json=False, display_video=False,
+                      confidence_threshold=0.5, yolo_model='yolov5s', model_weights=None,
+                      mqtt_host=None, mqtt_port=None, mqtt_topic=None, mqtt_user=None,
+                      mqtt_password=None):
 
     model_classes = 'coco.names'
 
@@ -208,19 +210,19 @@ def run_yolo_on_video(video_source, print_json=False, display_video=False,
 
     classes = load_classes(model_classes)
 
-    process_video(video_source, model, classes, print_json, display_video,
-                  confidence_threshold, yolo_model, model_weights,
+    process_video(video_source, model, classes, publish_json, display_video,
                   mqtt_host, mqtt_port, mqtt_topic, mqtt_user, mqtt_password)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input', type=str,
                         help='Input video stream (RTSP/UDP link, file path, or device path)', required=True)
-    parser.add_argument('-p', '--publish', help='Publish JSON output', action='store_true')
+    parser.add_argument('-p', '--publish_json', help='Publish JSON output', action='store_true')
     parser.add_argument('-c', '--confidence', type=float, default=0.5,
                         help='Confidence threshold for object detection (default: 0.5)')
     parser.add_argument('-d', '--display', help='Display video with bounding boxes', action='store_true')
-    parser.add_argument('-w', '--model_weights',  type=str, help='Provide custom weight name')
+    parser.add_argument('-w', '--model_weights', type=str, help='Provide custom weight name')
     parser.add_argument('-y', '--yolo_model', type=str, default='yolov5s',
                         help='YOLOv5 model to use (default: yolov5s)')
 
@@ -228,10 +230,10 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--mqtt_port', type=int, help='MQTT broker port')
     parser.add_argument('-t', '--mqtt_topic', type=str, help='MQTT message topic')
     parser.add_argument('-u', '--mqtt_user', type=str, help='MQTT broker username')
-    parser.add_argument('-w', '--mqtt_password', type=str, help='MQTT broker password')
+    parser.add_argument('-o', '--mqtt_password', type=str, help='MQTT broker password')
     args = parser.parse_args()
 
-    run_yolo_on_video(args.input, args.print, args.display, args.confidence,
+    run_yolo_on_video(args.input, args.publish_json, args.display, args.confidence,
                       args.yolo_model, args.model_weights, args.mqtt_host,
                       args.mqtt_port, args.mqtt_topic, args.mqtt_user,
                       args.mqtt_password)
